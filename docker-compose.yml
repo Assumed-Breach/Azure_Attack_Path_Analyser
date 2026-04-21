@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  neo4j:
+    image: docker.io/library/neo4j:4.4
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_SECRET}
+    ports:
+      - 127.0.0.1:${NEO4J_DB_PORT:-7687}:7687
+      - 127.0.0.1:${NEO4J_WEB_PORT:-7474}:7474
+    volumes:
+      - neo4j-data:/data
+
+  bloodhound:
+    image: docker.io/specterops/bloodhound:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - neo4j
+    environment:
+      bhe_database_connection: user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} host=postgres
+      bhe_neo4j_connection: neo4j://neo4j:${NEO4J_SECRET}@neo4j:7687/
+      bhe_default_admin_password: ${BLOODHOUND_ADMIN_PASSWORD}
+      bhe_default_admin_email_address: ${BLOODHOUND_ADMIN_EMAIL}
+      bhe_root_url: http://0.0.0.0:${BLOODHOUND_PORT}
+    ports:
+      - "${BLOODHOUND_PORT}:8080"
+
+  azurehound:
+    image: ghcr.io/bloodhoundad/azurehound:latest
+    profiles: ["collect"]
+    restart: "no"
+    command:
+      - list
+      - --tenant
+      - ${AZURE_TENANT_ID}
+      - -a
+      - ${AZURE_CLIENT_ID}
+      - -s
+      - ${AZURE_CLIENT_SECRET}
+      - -o
+      - /output/azurehound.json
+    volumes:
+      - ./output:/output
+
+  prowler:
+    image: docker.io/prowlercloud/prowler:stable
+    profiles: ["collect"]
+    restart: "no"
+    environment:
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+    command:
+      - azure
+      - --sp-env-auth
+      - --subscription-ids
+      - ${AZURE_SUBSCRIPTION_ID}
+      - --output-modes
+      - csv
+      - json-ocsf
+      - html
+      - --output-directory
+      - /output
+    volumes:
+      - ./output:/output
+
+volumes:
+  neo4j-data:
+  postgres-data:

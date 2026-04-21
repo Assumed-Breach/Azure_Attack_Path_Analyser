@@ -1,0 +1,16 @@
+model = "gpt-5.4"
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+
+[mcp_servers.bloodhound_mcp]
+command = "uv"
+args = ["run", "main.py"]
+cwd = "/absolute/path/to/bloodhound_mcp"
+env_vars = [
+  "BLOODHOUND_DOMAIN",
+  "BLOODHOUND_PORT",
+  "BLOODHOUND_SCHEME",
+  "BLOODHOUND_TOKEN_ID",
+  "BLOODHOUND_TOKEN_KEY",
+]
