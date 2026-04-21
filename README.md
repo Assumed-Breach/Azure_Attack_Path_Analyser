@@ -1,106 +1,21 @@
-# Azure Recon Codex Workspace
+# Azure Attack Path Analyser
 
-Offline Azure/Entra reconnaissance analysis for Codex using:
+Offline Azure / Entra attack-path analysis for **Codex** using:
 
 - AzureHound exports
 - Prowler JSON-OCSF reports
-- BloodHound CE with the BloodHound MCP server
+- BloodHound CE through `bloodhound_mcp`
 
-The core idea is simple: analysts drop collected data into `output/`, start a local BloodHound CE stack, install `bloodhound_mcp` separately, and let Codex drive repeatable analysis through the repo's `AGENTS.md` methodology.
+This repo is designed for **authorised security assessments**. It helps analysts turn static cloud recon data into structured findings and attacker-focused scenarios without querying live Azure or Entra control planes.
 
-## What This Repo Should Be
+## 🔍 What It Does
 
-This should ship as a **GitHub template workspace**, not just a loose analyst folder.
+- Maps tenants and subscriptions from AzureHound data
+- Correlates AzureHound, Prowler, and BloodHound graph results
+- Identifies privilege paths, exposed high-value resources, and risky service principals
+- Produces repeatable findings and attack-path narratives through [`AGENTS.md`](./AGENTS.md)
 
-That means the public repo should provide:
-
-- A safe default repo layout
-- A documented local BloodHound CE stack
-- A Codex project config example
-- A clean `AGENTS.md` that encodes the analysis method
-- Helper scripts for ingest and collection
-
-It should **not** ship with live secrets or client data.
-
-## Recommended Product Shape
-
-This repo should stay focused on:
-
-- The analyst workflow
-- `AGENTS.md`
-- Local helper scripts
-- Codex project configuration
-
-`bloodhound_mcp` should be installed as an external dependency.
-
-## Quick Start
-
-### 1. Prerequisites
-
-- Docker with Compose
-- Python 3.11+
-- `uv`
-- Codex CLI
-
-OpenAI documents the current Codex CLI flow as:
-
-- Install Codex CLI with `npm i -g @openai/codex`
-- Run `codex`
-- Authenticate on first run with a ChatGPT account or an API key
-
-Source:
-
-- Codex CLI setup: https://developers.openai.com/codex/cli
-
-### 2. Clone and prepare the repo
-
-```bash
-git clone <your-repo-url>
-cd <your-repo-dir>
-cp .env.example .env
-```
-
-Fill in `.env` with your BloodHound API token, Azure service principal values if you want to run collection, and local stack settings.
-
-### 3. Start BloodHound CE locally
-
-```bash
-./bloodhound_up.sh
-```
-
-This repo expects a local BloodHound CE stack from `docker-compose.yml`.
-
-### 4. Install the BloodHound MCP dependency
-
-Install `bloodhound_mcp` outside this repo. One straightforward layout is a sibling directory:
-
-```bash
-git clone https://github.com/mwnickerson/bloodhound_mcp.git ../bloodhound_mcp
-uv --directory ../bloodhound_mcp sync
-```
-
-### 5. Configure Codex
-
-Project-scoped Codex config is supported through `.codex/config.toml` for trusted projects.
-
-Source:
-
-- Codex config reference: https://developers.openai.com/codex/config-reference
-- Codex MCP configuration: https://developers.openai.com/codex/mcp
-
-Copy the example config:
-
-```bash
-cp .codex/config.toml.example .codex/config.toml
-```
-
-Then edit `.codex/config.toml` and set `cwd` to the absolute path of your external `bloodhound_mcp` checkout.
-
-The OpenAI Docs MCP setup and `~/.codex/config.toml` / project-scoped `.codex/config.toml` pattern are documented here:
-
-- Docs MCP: https://developers.openai.com/learn/docs-mcp
-
-### 6. Provide analysis input
+## 🧱 Inputs
 
 Place evidence in `output/`:
 
@@ -113,39 +28,116 @@ Upload AzureHound exports into BloodHound:
 python3 bloodhound_upload.py
 ```
 
-`bloodhound_upload.py` will auto-select `.zip` files first, or `.json` files if no zip files are present.
+`bloodhound_upload.py` selects `.zip` files first, or `.json` files if no zip files are present.
 
-### 7. Run analysis with Codex
+## ⚙️ Setup
 
-Start Codex with the wrapper so the repo `.env` is exported to the MCP server:
+### 1. Prerequisites
+
+- Docker with Compose
+- Python 3.11+
+- `uv`
+- Codex CLI
+
+Install Codex CLI:
+
+```bash
+npm i -g @openai/codex
+```
+
+OpenAI docs:
+
+- Codex CLI: https://developers.openai.com/codex/cli
+- Codex config: https://developers.openai.com/codex/config-reference
+- Codex MCP: https://developers.openai.com/codex/mcp
+
+### 2. Clone and prepare the repo
+
+```bash
+git clone <your-repo-url>
+cd <your-repo-dir>
+cp .env.example .env
+```
+
+Fill in `.env` with your BloodHound connection details, API token, and optional Azure collection credentials.
+
+### 3. Start BloodHound CE
+
+```bash
+./bloodhound_up.sh
+```
+
+### 4. Install `bloodhound_mcp`
+
+Keep `bloodhound_mcp` outside this repo. A simple layout is a sibling directory:
+
+```bash
+git clone https://github.com/mwnickerson/bloodhound_mcp.git ../bloodhound_mcp
+uv --directory ../bloodhound_mcp sync
+```
+
+### 5. Configure Codex
+
+Copy the example config:
+
+```bash
+cp .codex/config.toml.example .codex/config.toml
+```
+
+Then edit `.codex/config.toml` and set `cwd` to the absolute path of your external `bloodhound_mcp` checkout.
+
+### 6. Run Codex
+
+Start Codex through the wrapper so the repo `.env` is exported to the MCP server:
 
 ```bash
 ./codex_run.sh
 ```
 
-Then ask for a scoped analysis, for example:
+Example prompt:
 
 ```text
-Map the tenants in output, run the standard sweep, and give me findings.
+Map the tenants in output, run the standard sweep, and give me findings and attack paths.
 ```
 
-## Recommended Codex Model Defaults
+## 📤 Output
 
-OpenAI currently recommends `gpt-5.4` as the starting point if you're unsure which model to use, and separately documents `gpt-5.3-codex` as a coding-optimized option with `low`, `medium`, `high`, and `xhigh` reasoning settings.
+The analyser produces remediation-focused findings plus attacker-perspective scenarios. Below are **sanitised examples** with placeholder identities, tenants, subscriptions, and resources.
 
-For this workspace:
+### Attack Path AP-1: Low-Privilege User to Tenant-Wide App Control
 
-- Default: `gpt-5.4`
-- Heavier repo or scripting work: `gpt-5.3-codex`
-- Starting reasoning level: `high`
+**Breach Premise:** `user@corp.example` is compromised.  
+**Objective:** Gain durable control over application identities in the tenant.
 
-Sources:
+1. The user can register an application because tenant defaults permit member app registration.
+2. The created app receives a high-impact Microsoft Graph permission through an exposed admin-consent path or mis-scoped app governance.
+3. The attacker adds credentials to a privileged app or creates a new long-lived service principal foothold.
 
-- Models overview: https://developers.openai.com/api/docs/models
-- GPT-5.3-Codex model page: https://developers.openai.com/api/docs/models/gpt-5.3-codex
-- Code generation guidance: https://developers.openai.com/api/docs/guides/code-generation
+**Impact:** Tenant-wide persistence and delegated privilege escalation.
 
-## Repo Layout
+### Attack Path AP-2: External Service Principal to Production Subscription Control
+
+**Breach Premise:** An externally owned service principal already trusted in the tenant is compromised.  
+**Objective:** Take control of a production subscription.
+
+1. The external service principal holds a privileged role on `Production-Subscription-A`.
+2. BloodHound confirms control reaches resource groups and production workloads inside that subscription.
+3. Prowler findings show weak boundaries on attached high-value resources, increasing blast radius after control is obtained.
+
+**Impact:** Broad resource modification, persistence, and access to production management surfaces.
+
+### Attack Path AP-3: Managed Identity to Sensitive Secret Access
+
+**Breach Premise:** A workload identity on `prod-functionapp-01` is compromised.  
+**Objective:** Access secrets used by downstream production services.
+
+1. The Function App managed identity has privileged access on a production resource group or Key Vault.
+2. BloodHound confirms the workload identity can reach the target resource through direct or inherited assignments.
+3. Prowler shows the target Key Vault or data service has weak network controls, removing a boundary that would otherwise slow or limit abuse.
+
+**Impact:** Secret theft, service impersonation, and follow-on access into production systems.
+
+## 🗂 Repo Layout
 
 ```text
 .
@@ -165,23 +157,8 @@ Sources:
     └── RELEASE_PLAN.md
 ```
 
-## Safe Publishing Checklist
+## Notes
 
-Before the first public push:
-
-1. Remove or rotate every secret currently stored in local `.env`.
-2. Do not publish `output/` evidence.
-3. Do not publish machine-specific `.codex/config.toml`.
-4. Keep `bloodhound_mcp` external to this repo.
-5. Add a top-level license for this repo's own code and docs.
-
-## Intended Workflow
-
-This workspace is for **offline analysis and reporting**, not live interaction with Azure or Entra control planes.
-
-The analyst loop is:
-
-1. Collect AzureHound and Prowler data.
-2. Load AzureHound into BloodHound CE.
-3. Let Codex combine raw files, BloodHound MCP graph traversal, and the repo's analysis instructions.
-4. Produce findings and attack-path narratives in a repeatable format.
+- This repo is for **offline analysis and reporting**, not live Azure or Entra interaction.
+- Do not commit `.env`, real assessment data, or local `.codex/config.toml`.
+- Keep `bloodhound_mcp` external to this repository.
