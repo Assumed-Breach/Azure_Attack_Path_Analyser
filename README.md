@@ -11,7 +11,7 @@ This repo is built for authorised security assessments and assumed-breach analys
 - high-signal findings tied to real identities, roles, apps, and resources
 - remediation-ready output grounded in AzureHound records, Prowler findings, BloodHound graph paths, and Microsoft documentation
 
-It works **offline** against collected evidence, so analysts can generate serious attack-path analysis without querying live Azure or Entra control planes during reporting.
+It works **offline** against collected evidence. The AI does not touch the live Azure tenant or Entra control plane; it analyses the collected findings, graph data, and report artifacts only.
 
 ## Data Sources
 
@@ -54,22 +54,22 @@ In practice, `AGENTS.md` is what turns Codex from a generic coding assistant int
 
 ## 🧱 Inputs
 
-Place evidence in `output/`:
+Drop your collected evidence into `output/`:
 
 - AzureHound `.json` or `.zip`
 - Prowler `.ocsf.json`
 
-Upload AzureHound exports into BloodHound:
+Then load AzureHound into BloodHound:
 
 ```bash
 python3 bloodhound_upload.py
 ```
 
-`bloodhound_upload.py` selects `.zip` files first, or `.json` files if no zip files are present.
+The uploader prefers `.zip` files and falls back to `.json` if no zip archives are present.
 
 ## ⚙️ Setup
 
-### 1. Prerequisites
+### 1. Install the toolchain
 
 - Docker with Compose
 - Python 3.11+
@@ -88,7 +88,7 @@ OpenAI docs:
 - Codex config: https://developers.openai.com/codex/config-reference
 - Codex MCP: https://developers.openai.com/codex/mcp
 
-### 2. Clone and prepare the repo
+### 2. Clone the workspace
 
 ```bash
 git clone <your-repo-url>
@@ -96,26 +96,30 @@ cd <your-repo-dir>
 cp .env.example .env
 ```
 
-Fill in `.env` with your BloodHound connection details, API token, and optional Azure collection credentials.
+Populate `.env` with:
 
-### 3. Start BloodHound CE
+- BloodHound connection details
+- BloodHound API token
+- optional Azure collection credentials if you want this repo to run AzureHound or Prowler collection locally
+
+### 3. Boot BloodHound CE
 
 ```bash
 ./bloodhound_up.sh
 ```
 
-### 4. Install `bloodhound_mcp`
+### 4. Add `bloodhound_mcp`
 
-Keep `bloodhound_mcp` outside this repo. A simple layout is a sibling directory:
+Keep `bloodhound_mcp` outside this repo. The cleanest layout is a sibling checkout:
 
 ```bash
 git clone https://github.com/mwnickerson/bloodhound_mcp.git ../bloodhound_mcp
 uv --directory ../bloodhound_mcp sync
 ```
 
-### 5. Configure Codex
+### 5. Point Codex at the MCP server
 
-Copy the example config:
+Create the project Codex config:
 
 ```bash
 cp .codex/config.toml.example .codex/config.toml
@@ -123,7 +127,7 @@ cp .codex/config.toml.example .codex/config.toml
 
 Then edit `.codex/config.toml` and set `cwd` to the absolute path of your external `bloodhound_mcp` checkout.
 
-### 6. Run Codex
+### 6. Run the analyst
 
 Start Codex through the wrapper so the repo `.env` is exported to the MCP server:
 
