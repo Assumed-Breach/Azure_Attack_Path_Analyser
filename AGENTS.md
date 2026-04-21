@@ -325,33 +325,33 @@ Remediation:  <action> — <Microsoft framework name, section, URL>
 
 ## Attack Path Scenario Format
 
-Each scenario is attacker-perspective, step-by-step, and ends at a concrete objective. Every step cites its enabling evidence. Describe the mechanism and why it works. Do not produce working commands, payloads, or token manipulation tradecraft.
+Each scenario is attacker-perspective, step-by-step, and ends at a concrete objective. Every step cites its enabling evidence. Describe the mechanism and why it works. Do not produce working commands, payloads, or token manipulation tradecraft. Use the full report-style block below in final output; do not collapse scenarios into short summary prose.
 
 ```text
 ATTACK PATH AP-N: <title — attacker objective in one clause>
 
-Breach Premise:         <assumed starting compromise>
-Attacker Objective:     <specific end state>
-Why This Works:         <structural reason>
-Findings Enabling Path: <AB-NNN, AB-NNN, ...>
-Estimated Time:         <rough time from Step 1 to objective>
+Breach Premise:         [CONFIRMED/DOCUMENTED/INFERRED/UNKNOWN] <assumed starting compromise>
+Attacker Objective:     [CONFIRMED/DOCUMENTED/INFERRED/UNKNOWN] <specific end state>
+Why This Works:         [CONFIRMED/DOCUMENTED/INFERRED/UNKNOWN] <structural reason>
+Findings Enabling Path: [CONFIRMED] <AB-NNN, AB-NNN, ...>
+Estimated Time:         [INFERRED] <rough time from Step 1 to objective>
 
 Step N — <action label>
 <Descriptive narrative. Name the specific mechanism. Do not provide commands or payloads.>
 [Evidence: CONFIRMED/DOCUMENTED/INFERRED — cite specific record or source]
 
 Detection Opportunities:
-  Step N: <what a defender would observe and in which log source>
-          Detectability: HIGH / MEDIUM / LOW / NONE
+Step N: [CONFIRMED/DOCUMENTED/INFERRED/UNKNOWN] <what a defender would observe and in which log source>. Detectability: HIGH / MEDIUM / LOW / NONE.
 
 Analyst Notes:
-  Persistence achieved:  <yes/no — how access is maintained>
-  Cross-tenant risk:     <yes/no>
-  Data gaps:             <what is UNKNOWN that could change severity or feasibility>
+[CONFIRMED/DOCUMENTED/INFERRED/UNKNOWN] Persistence achieved: <yes/no — how access is maintained>
+[CONFIRMED/DOCUMENTED/INFERRED/UNKNOWN] Cross-tenant risk: <yes/no>
+[CONFIRMED/DOCUMENTED/INFERRED/UNKNOWN] Data gaps: <what is UNKNOWN that could change severity or feasibility>
 ```
 
 Rules:
 
+- Do not compress the scenario into a short executive summary. Emit the labeled block above.
 - Every step must cite at least one `AB-NNN` finding or a `CONFIRMED` or `DOCUMENTED` data point.
 - When BloodHound MCP is used for a step, cite the returned node and edge sequence as part of the `CONFIRMED` evidence.
 - Write steps from the attacker's perspective without giving working tradecraft.
