@@ -1,19 +1,56 @@
 # Azure Attack Path Analyser
 
-Offline Azure / Entra attack-path analysis for **Codex** using:
+Turn **AzureHound**, **Prowler**, and **BloodHound** data into evidence-backed Azure / Entra attack paths with **Codex**.
+
+Produce tenant takeover scenarios, privilege-escalation paths, and remediation-ready findings from static cloud recon data.
+
+This repo is built for authorised security assessments and assumed-breach analysis. It takes static cloud recon data and produces:
+
+- validated privilege-escalation paths
+- tenant and subscription takeover scenarios
+- high-signal findings tied to real identities, roles, apps, and resources
+- remediation-ready output grounded in AzureHound records, Prowler findings, BloodHound graph paths, and Microsoft documentation
+
+It works **offline** against collected evidence, so analysts can generate serious attack-path analysis without querying live Azure or Entra control planes during reporting.
+
+## Data Sources
+
+The analyser works from:
 
 - AzureHound exports
 - Prowler JSON-OCSF reports
 - BloodHound CE through `bloodhound_mcp`
 
-This repo is designed for **authorised security assessments**. It helps analysts turn static cloud recon data into structured findings and attacker-focused scenarios without querying live Azure or Entra control planes.
-
 ## 🔍 What It Does
 
-- Maps tenants and subscriptions from AzureHound data
-- Correlates AzureHound, Prowler, and BloodHound graph results
-- Identifies privilege paths, exposed high-value resources, and risky service principals
-- Produces repeatable findings and attack-path narratives through [`AGENTS.md`](./AGENTS.md)
+- Maps tenant and subscription scope from AzureHound collections
+- Correlates AzureHound evidence, Prowler exposure findings, and BloodHound graph paths into a single attack narrative
+- Surfaces real privilege-escalation paths, exposed high-value resources, and risky users, groups, apps, and service principals
+- Produces repeatable findings and operator-grade attack-path scenarios through [`AGENTS.md`](./AGENTS.md)
+
+## 🧠 Why `AGENTS.md` Matters
+
+`AGENTS.md` is the core of the analyser.
+
+It does not just tell Codex to "look at some files." It encodes the actual analyst workflow:
+
+- how to map tenants and file scope before making claims
+- how to use `bloodhound_mcp` to make actual BloodHound graph calls for shortest paths, nested membership expansion, and transitive privilege validation
+- how to validate paths with BloodHound graph results instead of guessing
+- how to distinguish confirmed evidence from inferred conclusions
+- how to correlate AzureHound privilege data with Prowler exposure findings
+- how to separate true path creators and path amplifiers from generic hardening noise
+- how to emit findings and attack paths in a consistent report format
+
+That matters because it makes the output:
+
+- more consistent across runs
+- more defensible for client reporting
+- less likely to drift into vague LLM summarisation
+- grounded in actual BloodHound graph traversal rather than static-file-only interpretation
+- much closer to how a real operator would structure Azure / Entra attack-path analysis
+
+In practice, `AGENTS.md` is what turns Codex from a generic coding assistant into a scoped Azure recon analyst.
 
 ## 🧱 Inputs
 
@@ -109,33 +146,34 @@ The analyser produces remediation-focused findings plus attacker-perspective sce
 ```text
 ATTACK PATH AP-1: Turn a production Terraform app into durable production control, secret persistence, and exposed cluster administration
 
-Breach Premise:         [INFERRED] The attacker has the standing app password for terraform-pipeline-prod.
-Attacker Objective:     [INFERRED] Keep durable control over production subscriptions, pipeline secrets, and two production AKS clusters.
-Why This Works:         [CONFIRMED] BloodHound validates an Owner path from the pipeline identity into multiple production subscriptions. [CONFIRMED] AzureHound shows the same identity has Key Vault secret Get/List/Set rights. [CONFIRMED] Prowler shows both production AKS clusters expose a public management surface.
+Breach Premise:         [INFERRED] The attacker has the standing devops app password for Terraform-Pipeline-Production.
+Attacker Objective:     [INFERRED] Keep durable control over the target production subscriptions, production pipeline secrets, and the two production decisioning AKS clusters.
+Why This Works:         [CONFIRMED] BloodHound validates Terraform-Pipeline-Production -> AZRunsAs -> TERRAFORM-PIPELINE-PRODUCTION -> AZOwns/AZMemberOf -> PRODUCTION OWNERS ROLE -> AZOwner -> Prod-Platform, Prod-Core, Prod-Data, Data-Engineering, Decisioning-Prod-A, and Decisioning-Prod-B. [DOCUMENTED — https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles] Azure Owner can manage all resources and assign Azure RBAC roles. [CONFIRMED] AzureHound shows prod-pipeline-kv has networkAcls {} and grants object 00000000-1111-2222-3333-444444444444 secret Get/List/Set. [DOCUMENTED — https://learn.microsoft.com/en-us/azure/key-vault/general/network-security] Microsoft states a firewall-disabled Key Vault accepts requests from all applications and Azure services, with access then controlled by authentication and vault permissions. [CONFIRMED] Prowler flags aks_clusters_public_access_disabled on aks-decisioning-prod-a and aks-decisioning-prod-b. [DOCUMENTED — https://learn.microsoft.com/en-us/azure/aks/api-server-authorized-ip-ranges] Microsoft states the AKS API server has a public IP by default unless constrained. [DOCUMENTED — https://learn.microsoft.com/en-us/azure/aks/use-node-public-ips] AKS nodes do not require public IPs for normal communication.
 Findings Enabling Path: [CONFIRMED] AB-001, AB-005, AB-006, AB-007
 Estimated Time:         [INFERRED] Minutes.
 
 Step 1 — Reuse the standing pipeline identity.
-[Evidence: CONFIRMED — The application has an active long-lived credential and no clear owner accountability.]
+[Evidence: CONFIRMED — AZApp 00000000-aaaa-bbbb-cccc-111111111111 has password credential expiry 2299-12-31T00:00:00Z, and AZAppOwner / AZServicePrincipalOwner are null.]
 
 Step 2 — Traverse the validated production Owner path.
-[Evidence: CONFIRMED — BloodHound returns owner paths from the pipeline identity into multiple production subscriptions.]
+[Evidence: CONFIRMED — BloodHound returns validated owner paths from Terraform-Pipeline-Production into the production subscriptions listed above.]
 
-Step 3 — Read or change production pipeline secrets without requiring a private admin network.
-[Evidence: CONFIRMED — AzureHound grants Key Vault secret access and the vault has permissive network settings.]
+Step 3 — Read or change production pipeline secrets without needing a private admin network.
+[Evidence: CONFIRMED — AzureHound grants Terraform-Pipeline-Production secret Get/List/Set on prod-pipeline-kv; CONFIRMED — the vault record has empty networkAcls; DOCUMENTED — https://learn.microsoft.com/en-us/azure/key-vault/general/network-security]
 
-Step 4 — Administer the production AKS clusters through their exposed management plane.
-[Evidence: CONFIRMED — BloodHound paths reach the production AKS resources and Prowler flags public cluster access.]
+Step 4 — Administer the two production decisioning AKS clusters through their public management surface once owner-level control is established.
+[Evidence: CONFIRMED — BloodHound shortest paths reach AKS-DECISIONING-PROD-A and AKS-DECISIONING-PROD-B; CONFIRMED — Prowler flags public access on both clusters; DOCUMENTED — https://learn.microsoft.com/en-us/azure/aks/api-server-authorized-ip-ranges]
 
 Detection Opportunities:
 Step 1: [CONFIRMED] Entra service principal sign-in logs would show app authentication. Detectability: MEDIUM.
-Step 3: [UNKNOWN] This is not in the collected data. To verify: review Key Vault diagnostic logs and recent secret operations. Detectability: UNKNOWN.
-Step 4: [CONFIRMED] Azure Activity Log and AKS diagnostics should show cluster-management changes. Detectability: MEDIUM.
+Step 3: [UNKNOWN] This is not in the collected data. To verify: review Key Vault diagnostic logs and recent secret operations for prod-pipeline-kv. Detectability: UNKNOWN.
+Step 4: [CONFIRMED] Azure Activity Log and AKS diagnostic logs should show cluster-management changes. Detectability: MEDIUM.
 
 Analyst Notes:
-[CONFIRMED] Persistence achieved: yes, through the standing app credential and reachable production secrets.
+[CONFIRMED] Persistence achieved: yes, via the standing app secret and any production secrets reachable through the vault.
 [CONFIRMED] Cross-tenant risk: no.
-[UNKNOWN] Data gaps: This is not in the collected data. To verify: inspect live AKS access settings, node public IP settings, and current secret inventory.
+[INFERRED] Additional Prowler exposure widens blast radius: several production Cosmos DB accounts allow all networks and do not use private endpoints, so any already-authorized workload or stolen database secret would face weaker network containment. [DOCUMENTED — https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-configure-firewall] [DOCUMENTED — https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-configure-private-endpoints]
+[UNKNOWN] Data gaps: This is not in the collected data. To verify: inspect live AKS apiServerAccessProfile, node-pool public IP settings, and the current secret inventory in prod-pipeline-kv.
 ```
 
 ### Attack Path AP-2: Pivot from an externally owned management app into internal service principals, then retain access through app-based persistence
@@ -143,20 +181,20 @@ Analyst Notes:
 ```text
 ATTACK PATH AP-2: Pivot from an externally owned management app into internal service principals, then retain access through app-based persistence
 
-Breach Premise:         [INFERRED] The attacker controls an externally owned management application already trusted in the tenant.
-Attacker Objective:     [INFERRED] Convert an external foothold into internal-looking persistence inside the target tenant.
-Why This Works:         [CONFIRMED] AzureHound shows the external app holds high-impact Microsoft Graph write permissions. [CONFIRMED] BloodHound returns secret-add paths from that app to multiple internal service principals. [CONFIRMED] Tenant defaults still allow member-driven app creation and broad consent patterns.
+Breach Premise:         [INFERRED] The attacker controls the external operator behind External-Management-App or its managing tenant.
+Attacker Objective:     [INFERRED] Convert an externally owned foothold into internal-looking persistence inside the target tenant.
+Why This Works:         [CONFIRMED] AzureHound shows External-Management-App is externally owned by tenant 99999999-8888-7777-6666-555555555555 and holds Application.ReadWrite.All, Group.ReadWrite.All, User.ReadWrite.All, Domain.ReadWrite.All, and Policy.ReadWrite.AuthenticationFlows against Microsoft Graph. [DOCUMENTED — https://learn.microsoft.com/en-us/graph/permissions-reference] Microsoft documents Application.ReadWrite.All as allowing create, read, update, and delete of applications and service principals. [CONFIRMED] BloodHound returns External-Management-App -> AZMGAddSecret -> multiple internal service principals. [CONFIRMED] The same tenant fails the default-member app creation, group creation, and user-consent checks in AB-004. [DOCUMENTED — https://learn.microsoft.com/en-us/entra/fundamentals/users-default-permissions] Member users can register applications and manage credentials on applications they own. [DOCUMENTED — https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-user-consent] Microsoft recommends restricting user consent to reduce malicious app risk.
 Findings Enabling Path: [CONFIRMED] AB-002, AB-004
 Estimated Time:         [INFERRED] Minutes to hours.
 
 Step 1 — Use the external app’s Graph write permissions to change authentication state on reachable internal service principals.
-[Evidence: CONFIRMED — App role assignments grant high-impact Graph roles and BloodHound returns secret-add paths.]
+[Evidence: CONFIRMED — AZAppRoleAssignment grants the high-impact Graph roles; CONFIRMED — BloodHound returns AZMGAddSecret edges from External-Management-App to multiple service principals.]
 
 Step 2 — Shift persistence into internally named application identities so disabling the original external app does not fully remove access.
-[Evidence: CONFIRMED — BloodHound validates credential-add reach to internal service principals.]
+[Evidence: CONFIRMED — BloodHound validates secret-add reach to internal service principals; INFERRED — once new credentials are added to those internal identities, access no longer depends solely on the original external app.]
 
 Step 3 — Recreate or supplement the foothold later through normal tenant defaults if any ordinary member user is compromised.
-[Evidence: CONFIRMED — Tenant defaults leave member app creation and consent-friendly settings enabled.]
+[Evidence: CONFIRMED — AB-004 shows default member app creation and user consent remain enabled; DOCUMENTED — https://learn.microsoft.com/en-us/entra/fundamentals/users-default-permissions; DOCUMENTED — https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-user-consent]
 
 Detection Opportunities:
 Step 1: [CONFIRMED] Entra audit logs should record application and service-principal credential changes. Detectability: MEDIUM.
@@ -166,7 +204,8 @@ Step 3: [UNKNOWN] This is not in the collected data. To verify: review alerting 
 Analyst Notes:
 [CONFIRMED] Persistence achieved: yes, if internal service-principal credentials are added or replaced.
 [CONFIRMED] Cross-tenant risk: yes.
-[UNKNOWN] Data gaps: This is not in the collected data. To verify: review recent audit activity and current credentials for each reachable internal service principal.
+[INFERRED] AB-004 does not create the initial external-app path, but it makes eradication harder by leaving redundant app-based persistence patterns available inside the tenant.
+[UNKNOWN] Data gaps: This is not in the collected data. To verify: review recent audit activity and current credentials for every service principal returned by the AZMGAddSecret paths.
 ```
 
 ### Attack Path AP-3: Use a vendor member admin account for direct directory takeover and leave behind self-owned footholds
@@ -174,20 +213,20 @@ Analyst Notes:
 ```text
 ATTACK PATH AP-3: Use a vendor member admin account for direct directory takeover and leave behind self-owned footholds
 
-Breach Premise:         [INFERRED] The attacker compromises a vendor-operated member account such as vendor.admin@corp.example or vendor.support@tenant.example.
-Attacker Objective:     [INFERRED] Gain immediate directory-level administrative control and preserve access after the original vendor account is disabled.
-Why This Works:         [CONFIRMED] AzureHound shows enabled Member users from a vendor relationship already hold privileged Entra roles. [CONFIRMED] BloodHound validates direct role edges to those directory roles. [CONFIRMED] Tenant defaults still allow member app creation, group creation, and consent-friendly footholds.
+Breach Premise:         [INFERRED] The attacker compromises vendor.admin@examplecorp.com or vendor.support@exampletenant.onmicrosoft.com.
+Attacker Objective:     [INFERRED] Gain immediate tenant administrative control and preserve access after the original vendor account is disabled.
+Why This Works:         [CONFIRMED] AzureHound shows vendor.admin@examplecorp.com is an enabled Member user with Global Administrator, and vendor.support@exampletenant.onmicrosoft.com is an enabled Member user with User Administrator, Cloud Device Administrator, and Intune Administrator. [CONFIRMED] BloodHound validates the direct AZHasRole edges to Global Administrator and User Administrator. [DOCUMENTED — https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference] Those are privileged administrative roles. [CONFIRMED] The tenant also fails the default-member app creation, group creation, Microsoft 365 group creation, and user-consent checks from AB-004. [DOCUMENTED — https://learn.microsoft.com/en-us/entra/fundamentals/users-default-permissions]
 Findings Enabling Path: [CONFIRMED] AB-003, AB-004
 Estimated Time:         [INFERRED] Minutes.
 
 Step 1 — Sign in as an enabled vendor member account that already holds privileged directory roles.
-[Evidence: CONFIRMED — AzureHound shows the vendor-operated accounts are enabled Member users with privileged role assignments.]
+[Evidence: CONFIRMED — AzureHound shows both vendor accounts are enabled Member users with the listed role assignments.]
 
-Step 2 — Use those built-in admin roles for immediate tenant control.
-[Evidence: CONFIRMED — BloodHound validates direct role edges into high-impact Entra roles.]
+Step 2 — Use the existing privileged directory roles for immediate tenant control.
+[Evidence: CONFIRMED — BloodHound validates direct AZHasRole edges into Global Administrator and User Administrator.]
 
 Step 3 — Create owned apps, groups, or other secondary footholds so access can survive remediation of the original vendor account.
-[Evidence: CONFIRMED — Tenant defaults leave member app and group creation enabled.]
+[Evidence: CONFIRMED — AB-004 leaves member app and group creation enabled; DOCUMENTED — https://learn.microsoft.com/en-us/entra/fundamentals/users-default-permissions]
 
 Detection Opportunities:
 Step 1: [CONFIRMED] Entra sign-in logs would show vendor account authentication. Detectability: MEDIUM.
@@ -197,6 +236,7 @@ Step 3: [UNKNOWN] This is not in the collected data. To verify: review alerting 
 Analyst Notes:
 [CONFIRMED] Persistence achieved: yes, through owned applications or groups created after the initial compromise.
 [CONFIRMED] Cross-tenant risk: yes.
+[INFERRED] AB-004 materially changes this from “vendor admin account compromise” into “vendor admin compromise with easy secondary footholds.”
 [UNKNOWN] Data gaps: This is not in the collected data. To verify: review PIM, MFA, Conditional Access, and approved admin workstation controls for the vendor accounts.
 ```
 
