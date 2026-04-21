@@ -3,7 +3,7 @@
 Offline Azure/Entra reconnaissance analysis for Codex using:
 
 - AzureHound exports
-- Prowler HTML reports
+- Prowler JSON-OCSF reports
 - BloodHound CE with the BloodHound MCP server
 
 The core idea is simple: analysts drop collected data into `output/`, start a local BloodHound CE stack, install `bloodhound_mcp` separately, and let Codex drive repeatable analysis through the repo's `AGENTS.md` methodology.
@@ -105,7 +105,7 @@ The OpenAI Docs MCP setup and `~/.codex/config.toml` / project-scoped `.codex/co
 Place evidence in `output/`:
 
 - AzureHound `.json` or `.zip`
-- Prowler `.html`
+- Prowler `.ocsf.json`
 
 Upload AzureHound exports into BloodHound:
 
