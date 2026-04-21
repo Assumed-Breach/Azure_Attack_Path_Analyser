@@ -11,7 +11,12 @@ This repo is built for authorised security assessments and assumed-breach analys
 - high-signal findings tied to real identities, roles, apps, and resources
 - remediation-ready output grounded in AzureHound records, Prowler findings, BloodHound graph paths, and Microsoft documentation
 
-It works **offline** against collected evidence. The AI does not touch the live Azure tenant or Entra control plane; it analyses the collected findings, graph data, and report artifacts only.
+It works in two stages:
+
+- **Collection**: optional helper scripts run AzureHound and Prowler against an authorised tenant using your supplied credentials
+- **Analysis**: Codex works offline against the collected evidence and BloodHound graph data
+
+The AI does not touch the live Azure tenant or Entra control plane during analysis; it analyses the collected findings, graph data, and report artifacts only.
 
 ## Data Sources
 
@@ -20,6 +25,28 @@ The analyser works from:
 - AzureHound exports
 - Prowler JSON-OCSF reports
 - BloodHound CE through `bloodhound_mcp`
+
+## 🚀 Two Modes
+
+### 1. Collect evidence
+
+If you do not already have recon data, the repo can collect it for you:
+
+- `./azurehound_run.sh` runs AzureHound through Docker
+- `./prowler_run.sh` runs Prowler and writes JSON-OCSF output to `output/`
+
+This stage uses the Azure credentials you place in `.env`.
+
+### 2. Analyse with Codex
+
+Once the data is collected, Codex uses:
+
+- the AzureHound files in `output/`
+- the Prowler JSON-OCSF findings in `output/`
+- BloodHound graph queries through `bloodhound_mcp`
+- the methodology encoded in [`AGENTS.md`](./AGENTS.md)
+
+This is the stage that produces findings and attack paths. It is offline analysis over collected evidence, not live tenant interaction.
 
 ## 🔍 What It Does
 
@@ -54,12 +81,14 @@ In practice, `AGENTS.md` is what turns Codex from a generic coding assistant int
 
 ## 🧱 Inputs
 
-Drop your collected evidence into `output/`:
+You can either **bring your own evidence** or **collect it with the included scripts**.
+
+Expected evidence in `output/`:
 
 - AzureHound `.json` or `.zip`
 - Prowler `.ocsf.json`
 
-Then load AzureHound into BloodHound:
+Load AzureHound into BloodHound with:
 
 ```bash
 python3 bloodhound_upload.py
@@ -108,7 +137,18 @@ Populate `.env` with:
 ./bloodhound_up.sh
 ```
 
-### 4. Add `bloodhound_mcp`
+### 4. Collect evidence (optional)
+
+If you want the repo to run collection for you:
+
+```bash
+./azurehound_run.sh
+./prowler_run.sh
+```
+
+AzureHound output and Prowler JSON-OCSF reports will be written to `output/`.
+
+### 5. Add `bloodhound_mcp`
 
 Keep `bloodhound_mcp` outside this repo. The cleanest layout is a sibling checkout:
 
@@ -117,7 +157,13 @@ git clone https://github.com/mwnickerson/bloodhound_mcp.git ../bloodhound_mcp
 uv --directory ../bloodhound_mcp sync
 ```
 
-### 5. Point Codex at the MCP server
+### 6. Ingest AzureHound into BloodHound
+
+```bash
+python3 bloodhound_upload.py
+```
+
+### 7. Point Codex at the MCP server
 
 Create the project Codex config:
 
@@ -127,7 +173,7 @@ cp .codex/config.toml.example .codex/config.toml
 
 Then edit `.codex/config.toml` and set `cwd` to the absolute path of your external `bloodhound_mcp` checkout.
 
-### 6. Run the analyst
+### 8. Run the analyst
 
 Start Codex through the wrapper so the repo `.env` is exported to the MCP server:
 
