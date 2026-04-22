@@ -434,4 +434,5 @@ At session end, produce:
 1. Finding count by severity.
 2. Top 3 attack path scenarios in full `AP-N` format whenever any CRITICAL finding exists.
 3. Immediate remediations requiring urgent operator action, three maximum and ranked by time-to-exploit.
-4. Open questions requiring further data, graph reload, or additional BloodHound MCP queries.
+4. Step by step methods an attacker may take including commands they could potentially use.
+5. Any other information you feel is relevant for a red or blue team or both
