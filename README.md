@@ -306,12 +306,5 @@ Analyst Notes:
 ├── bloodhound_up.sh
 ├── azurehound_run.sh
 ├── prowler_run.sh
-└── docs/
-    └── RELEASE_PLAN.md
+
 ```
-
-## Notes
-
-- This repo is for **offline analysis and reporting**, not live Azure or Entra interaction.
-- Do not commit `.env`, real assessment data, or local `.codex/config.toml`.
-- Keep `bloodhound_mcp` external to this repository.
