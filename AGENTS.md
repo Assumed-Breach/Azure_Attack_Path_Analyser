@@ -461,7 +461,7 @@ At session start:
 At session end, produce:
 
 1. Finding count by severity.
-2. Top 3 attack path scenarios in full `AP-N` format whenever any CRITICAL finding exists.
+2. Top attack path scenarios in full `AP-N` format whenever any CRITICAL finding exists.
 3. Immediate remediations requiring urgent operator action, three maximum and ranked by time-to-exploit.
-4. Step-by-step attacker narrative in non-operational terms only. Do not include commands, payloads, token abuse steps, or executable tradecraft.
-5. Residual risks, material data gaps, and blue-team-relevant context.
+4. Step-by-step attacker narrative in operational terms only. Include commands, payloads, token abuse steps, or executable tradecraft where appropriate for a Team to investigate.
+5. Residual risks, material data gaps, and blue and red team-relevant context.
