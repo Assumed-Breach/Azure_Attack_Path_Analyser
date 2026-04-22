@@ -11,6 +11,13 @@ Do not execute actions against live Azure or Entra infrastructure. Local inspect
 
 **Assumed breach framing:** When asked to find attack paths, start from any enabled identity in the data regardless of its current privilege level. Do not require an initial access vector — assume any enabled identity may already be compromised. If the operator specifies a narrower starting context, such as a named user, group, workload identity, tenant, or subscription, honour that scope.
 
+**Standing privilege vs escalation rule:** In assumed-breach mode, distinguish:
+
+1. **Standing privilege exposure** — the compromised identity already directly holds the target privilege.
+2. **Escalation path** — the compromised identity must traverse one or more relationships to reach the target privilege.
+
+Surface both, but do not present a direct role holder as though it were a multi-hop escalation chain.
+
 ## Path Strengthening Rule
 
 After the initial privilege sweep, run a second pass that asks which misconfigurations actually change attacker feasibility, persistence, or blast radius. Distinguish three classes:
@@ -43,7 +50,7 @@ Do not use model memory for technical artefacts outside the pre-verified table. 
 
 ## Confidence Tiers
 
-Every factual statement in a finding carries exactly one tag:
+Every distinct factual claim in a finding or scenario step carries exactly one tag. At minimum, each field, bullet, and scenario step must have an explicit tag where a reader could otherwise confuse evidence with inference.
 
 | Tag | Meaning |
 |-----|---------|
@@ -75,6 +82,8 @@ jq '[.data[] | select(.kind=="AZTenant") | .data | {tenantId, displayName, defau
 ```
 
 When an operator names a specific tenant for analysis, load only the files for that tenant but actively flag if high-severity findings exist in other loaded files that are material to the named tenant's risk, for example a cross-tenant app with write access to the target tenant.
+
+When more than one AzureHound JSON file maps to the same tenant, treat them as shards of one collection and union them before resolving identities, groups, owners, or resource relationships. Do not declare an object or relationship absent until all files mapped to that tenant have been checked.
 
 ### AzureHound JSON (`./output/*.json`, `./output/*.zip`)
 
@@ -140,6 +149,12 @@ jq '[.data[] | select(.kind=="AZSubscriptionOwner") | .data | select(.owners != 
 
 ### Prowler JSON-OCSF (`./output/*.ocsf.json`, `./output/json-ocsf/*.ocsf.json`)
 
+### Missing or partial Prowler input handling
+
+If no Prowler JSON-OCSF files are present in the expected paths, do not block the assessment. Record a `Prowler coverage gap` in Step 0, continue with AzureHound and BloodHound analysis, and mark all Prowler-dependent enrichment as `UNKNOWN`.
+
+Do not infer PASS or FAIL state from Prowler HTML or CSV output. Those artefacts are secondary only and may be mentioned as operator context, not as authoritative evidence.
+
 Prowler JSON-OCSF output is a JSON list. Each entry is an OCSF Detection Finding object. The key fields for correlation are:
 
 | Field | Notes |
@@ -191,13 +206,14 @@ When an `AZAppRoleAssignment.appRoleId` matches a GUID below, cite it as `DOCUME
 | `bf7b1a76-6e77-406b-b258-bf5c7720e98f` | `Policy.ReadWrite.AuthenticationFlows` | HIGH — modify auth policies |
 | `62a82d76-70ea-41e2-9197-370581804d09` | `Group.Create` | MEDIUM — create new groups |
 | `243333ab-4d21-40cb-a475-36241daa0842` | `DeviceManagementManagedDevices.ReadWrite.All` | HIGH — full MDM device control |
-| `06a5fe6d-c49d-46a7-b082-56b1b14103c7` | `DeviceManagementManagedDevices.PrivilegedOperations.All` | HIGH — remote wipe, retire, passcode reset |
+| `5b07b0dd-2377-4e44-a38d-703f09a0dc3c` | `DeviceManagementManagedDevices.PrivilegedOperations.All` | HIGH — remote wipe, retire, passcode reset |
 | `9241abd9-d0e6-425a-bd4f-47ba86e767a4` | `DeviceManagementConfiguration.ReadWrite.All` | HIGH — modify all device config profiles |
 | `78145de6-330d-4800-a6ce-494ff2d33d07` | `DeviceManagementApps.ReadWrite.All` | HIGH — deploy/modify apps to all devices |
 | `2f51be20-0bb4-4fed-bf7b-db946066c75e` | `DeviceManagementManagedDevices.Read.All` | LOW — read device inventory |
 | `dc377aa6-52d8-4e23-b271-2a7ae04cedf3` | `DeviceManagementConfiguration.Read.All` | LOW — read device config |
+| `06a5fe6d-c49d-46a7-b082-56b1b14103c7` | `DeviceManagementServiceConfig.Read.All` | LOW — read Intune service configuration |
 | `bf394140-e372-4bf9-a898-299cfc7564e5` | `Policy.Read.All` | LOW — read policies |
-| `2f51be20-0bb4-4fed-bf7b-db946066c75e` | `AuditLog.Read.All` | LOW — read audit logs |
+| `b0afded3-3588-46d8-8b3d-9842eff778da` | `AuditLog.Read.All` | LOW — read audit logs |
 
 For any `appRoleId` not in this table: flag as `UNKNOWN` and recommend manual lookup at the URL above.
 
@@ -212,13 +228,13 @@ AzureHound and Prowler are scoped independently. A resource invisible to one too
 **Step 0a — Build the subscription inventory from AzureHound**
 
 ```bash
-jq -r '[.data[] | select(.kind=="AZSubscription") | .data | {id:.id, name:.displayName}] | unique_by(.id)' \
+jq -r '[.data[] | select(.kind=="AZSubscription") | .data | {id:.subscriptionId, name:.displayName}] | unique_by(.id)' \
   tenant-a.json tenant-b.json tenant-c.json 2>/dev/null | jq -s 'add'
 ```
 
 **Step 0b — Extract subscription IDs from Prowler FAIL findings**
 
-```python
+```bash
 # Parse normalized ARM resource IDs from each Prowler JSON-OCSF file
 # Extract /subscriptions/<id> prefixes and deduplicate
 jq -r '.[] | .resources[]? | [.uid, .name] | map(select(type=="string" and contains("/subscriptions/"))) | .[0] // empty' output/*.ocsf.json output/json-ocsf/*.ocsf.json 2>/dev/null | grep -oP '/subscriptions/[a-f0-9-]+' | grep -oP '[a-f0-9-]{36}' | sort -u
@@ -261,15 +277,19 @@ Resources in Prowler-only subscriptions must still be checked. Surface Prowler f
 
 Resolve each `principalId` to `AZUser`, `AZServicePrincipal`, or `AZGroup`. If a group holds the role, resolve its members via `AZGroupMember` across all loaded files.
 
+If a `principalId` in `AZRoleAssignment`, `AZSubscriptionOwner`, or `AZSubscriptionUserAccessAdmin` does not resolve to `AZUser`, `AZGroup`, or `AZServicePrincipal` in the tenant's loaded files, search the BloodHound graph for the object ID before declaring it `UNKNOWN`. If still unresolved, state that the principal may be deleted, filtered from collection, or present in an unloaded shard.
+
 **3. Subscription Owner / UAA sweep** — enumerate `AZSubscriptionOwner` and `AZSubscriptionUserAccessAdmin` for all production subscriptions.
 
 **4. Credential expiry sweep** — for every high-privilege SP identified in steps 2 and 3, check `AZApp.passwordCredentials[].endDateTime` against today's date.
 
 **5. Third-party SP detection** — for every SP involved in a privilege path, check `AZServicePrincipal.appOwnerOrganizationId`. If it does not match the current tenant ID, flag the SP as externally owned and surface the external tenant ID.
 
-**6. App owner accountability check** — for every high-privilege app registration, check `AZAppOwner`. If `owners` is null or empty, flag as unaccountable credential.
+**6. App owner accountability check** — for every high-privilege app registration, check both `AZAppOwner` and `AZServicePrincipalOwner` across all files for the tenant. If both are null or empty, flag as unaccountable credential. If one side is empty and the other is populated, record the asymmetry but do not overstate it as fully orphaned.
 
 **7. Vendor or external account detection** — scan `AZUser` records for accounts where the UPN or display name suggests a third party but `userType` is `Member` rather than `Guest`.
+
+Explicitly prioritise `AZGroup.isAssignableToRole == true`. If an enabled identity can add members to, own, or otherwise control a role-assignable group, treat that as a candidate Entra privilege-escalation path even if the resulting role assignment is indirect.
 
 **8. High-privilege Graph app permissions** — enumerate `AZAppRoleAssignment` records. For any SP holding CRITICAL or HIGH permissions from the GUID table above, surface a finding and trace whether the SP has an active credential.
 
@@ -304,6 +324,15 @@ BloodHound MCP is available and should be used for graph traversal, shortest-pat
 **Cannot do efficiently:** Prove data-plane access that is not modeled in AzureHound/BloodHound; infer runtime exploitability where the graph has no corresponding edge; confirm Conditional Access, MFA state, token lifetime policy, or other controls absent from the collected data; resolve paths that depend on nodes or edges missing from the imported graph.
 
 When a finding relies on graph traversal, cite the BloodHound query result as `CONFIRMED` and anchor the surrounding mechanism with raw file evidence and Microsoft documentation where needed. If BloodHound and the raw AzureHound files disagree on static object properties or access-policy details, prefer the raw files for those fields and cite the discrepancy explicitly. If one BloodHound query mode is unstable or errors, use another BloodHound MCP operation that returns a stable result before declaring the graph absent.
+
+**BloodHound query fallback order:** Prefer:
+
+1. node search to confirm object IDs,
+2. shortest-path queries for path validation,
+3. targeted info queries for node-specific detail,
+4. raw Cypher only when the above cannot express the question.
+
+If a query mode returns unstable tool errors, fall back to the next mode before declaring the graph insufficient.
 
 ## Finding Format
 
@@ -434,5 +463,5 @@ At session end, produce:
 1. Finding count by severity.
 2. Top 3 attack path scenarios in full `AP-N` format whenever any CRITICAL finding exists.
 3. Immediate remediations requiring urgent operator action, three maximum and ranked by time-to-exploit.
-4. Step by step methods an attacker may take including commands they could potentially use.
-5. Any other information you feel is relevant for a red or blue team or both
+4. Step-by-step attacker narrative in non-operational terms only. Do not include commands, payloads, token abuse steps, or executable tradecraft.
+5. Residual risks, material data gaps, and blue-team-relevant context.
