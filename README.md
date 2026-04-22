@@ -14,7 +14,7 @@ This repo is built for authorised security assessments and assumed-breach analys
 It works in two stages:
 
 - **Collection**: optional helper scripts run AzureHound and Prowler against an authorised tenant using your supplied credentials
-- **Analysis**: Codex works offline against the collected evidence and BloodHound graph data
+- **Analysis**: Codex works against the collected evidence and BloodHound graph data
 
 The AI does not touch the live Azure tenant or Entra control plane during analysis; it analyses the collected findings, graph data, and report artifacts only.
 
@@ -46,7 +46,7 @@ Once the data is collected, Codex uses:
 - BloodHound graph queries through `bloodhound_mcp`
 - the methodology encoded in [`AGENTS.md`](./AGENTS.md)
 
-This is the stage that produces findings and attack paths. It is offline analysis over collected evidence, not live tenant interaction.
+This is the stage that produces findings and attack paths. It is codex (AI) analysis over collected evidence, not live tenant interaction.
 
 ## 🔍 What It Does
 
